@@ -1,0 +1,60 @@
+<!--
+    File: !Euclid!.html
+    Author: Sam Armstrong
+    Course: COSC4103 - Computer Graphics
+    Assignment: Putting it all Together
+    Due Date: December 3, 2025
+
+    Webpage for a non-euclidian space raytrace based viewer
+
+    Used utils.js and dat.gui from "Real-Time 3D Graphics..."'s common folder for GUI interface
+-->
+
+<!DOCTYPE html>
+<html lang="en-us">
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"></meta>
+    <head>
+        <title>Graphics Engine</title>
+        
+        <!-- modules -->
+        <script type="text/javascript" src="/common/lib/dat.gui.js"></script>
+        <script type="text/javascript" src="/common/js/utils.js"></script>
+        <!-- main -->
+        <script src="!Euclid!.js"></script>
+        
+        <style>
+            body {
+                margin: 0;
+                height: 100%;
+                overflow: hidden;  	/* no scrollbars */
+                background-color: rgb(255, 255, 255);
+            }
+            canvas {
+                display: block;     
+                margin: 30 auto;     /* center horizontally */
+                background: white;
+                border-style: solid;
+            }
+            p {
+				left: 0; 
+				right: 0; 
+				margin-inline: auto; 
+				width: fit-content;
+				top: -1.5%;
+				
+                text-align: center;
+				color:rgb(0, 0, 0);
+				font-weight: bold;
+				font-size:3vw;
+				font-family:calibri;
+            }
+        </style>
+    
+    </head>
+    <body>
+        <canvas id="webgl_canvas" width="400" height="400">
+            Your browser does not support WebGL.
+        </canvas>
+    </body>
+</html>
