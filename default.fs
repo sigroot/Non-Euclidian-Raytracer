@@ -41,9 +41,199 @@ uniform bool spaceSkewedVelocity;
 uniform bool gridlines;
 uniform bool colorFade;
 
-
 out vec4 fragColor;
 
+struct convertPositionResult {
+    int newNode;
+    vec3 newPosition;
+};
+
+convertPositionResult convertPosition (int rNode, vec3 rPosition, int xyz, bool pos) {
+    int nextNode;
+    if (pos) {
+        nextNode = mapIndices[rNode][xyz];
+    } else {
+        nextNode = nMapIndices[rNode][xyz];
+    }
+
+    vec3 newPosition = vec3(rPosition.x*mapDistances[nextNode].x/mapDistances[rNode].x, rPosition.y*mapDistances[nextNode].y/mapDistances[rNode].y, rPosition.z*mapDistances[nextNode].z/mapDistances[rNode].z);
+    
+    if (pos) {
+        newPosition[xyz] = 0.0;
+    } else {
+        newPosition[xyz] = mapDistances[nextNode][xyz];
+    }
+
+    convertPositionResult result;
+    result.newNode = nextNode;
+    result.newPosition = newPosition;
+    return result;
+}
+
+struct closestWallResult {
+    int closestWall;
+    float closestIncrement;
+};
+
+closestWallResult getClosestWall (int rNode, vec3 rPosition, vec3 rMotion) {
+
+    int closestWall = 0; // 1 is posX, 2 is posY, 3 is posZ, 4 is negX, 5 is negY, 6 is negZ.
+    float closestIncrement = 999999999.9; // Amount to multiply by motion vector to reach a wall. Starts at infinity.
+    if (rMotion.x >= 0.0) {
+        float tempDist = (mapDistances[rNode].x - rPosition.x)/rMotion.x;
+        if (tempDist < closestIncrement) {
+            closestIncrement = tempDist;
+            closestWall = 1;
+        }
+    } else {
+        float tempDist = abs(-rPosition.x/rMotion.x);
+        if (tempDist < closestIncrement) {
+            closestIncrement = tempDist;
+            closestWall = 4;
+        }
+    }
+    if (rMotion.y >= 0.0) {
+        float tempDist = (mapDistances[rNode].y - rPosition.y)/rMotion.y;
+        if (tempDist < closestIncrement) {
+            closestIncrement = tempDist;
+            closestWall = 2;
+        }
+    } else {
+        float tempDist = abs(-rPosition.y/rMotion.y);
+        if (tempDist < closestIncrement) {
+            closestIncrement = tempDist;
+            closestWall = 5;
+        }
+    }
+    if (rMotion.z >= 0.0) {
+        float tempDist = (mapDistances[rNode].z - rPosition.z)/rMotion.z;
+        if (tempDist < closestIncrement) {
+            closestIncrement = tempDist;
+            closestWall = 3;
+        }
+    } else {
+        float tempDist = abs(-rPosition.z/rMotion.z);
+        if (tempDist < closestIncrement) {
+            closestIncrement = tempDist;
+            closestWall = 6;
+        }
+    }
+
+    closestWallResult result;
+    result.closestWall = closestWall;
+    result.closestIncrement = closestIncrement;
+    return result;
+}
+
+struct moveRayResult {
+    bool breakLoop;
+    int rNode;
+    vec3 rPosition;
+    vec3 rMotion;
+    float distanceTraveled;
+};
+
+moveRayResult moveRay (int rNode, vec3 rPosition, vec3 rMotion, float distanceTraveled, int closestWall, float closestIncrement) {
+    // Check if side has wall
+    //      If so, stop, record *distance* (required for shading)
+    bool breakLoop = false;
+    bool hitWall = false;
+    distanceTraveled += closestIncrement;
+    int nextNode;
+
+    switch (closestWall) {
+        case 1:
+            if ((mapFaces[rNode] & 32) == 0) {
+                rPosition += rMotion * closestIncrement;
+                convertPositionResult cPResult = convertPosition(rNode, rPosition, 0, true);
+                nextNode = cPResult.newNode;
+                rPosition = cPResult.newPosition;
+                hitWall = true;
+            } else {
+                breakLoop = true;
+            }
+            break;
+        case 2:
+            if ((mapFaces[rNode] & 8) == 0) {
+                rPosition += rMotion * closestIncrement;
+                convertPositionResult cPResult = convertPosition(rNode, rPosition, 1, true);
+                nextNode = cPResult.newNode;
+                rPosition = cPResult.newPosition;
+                hitWall = true;
+            } else {
+                breakLoop = true;
+            }
+            break;
+        case 3:
+            if ((mapFaces[rNode] & 2) == 0) {
+                rPosition += rMotion * closestIncrement;
+                convertPositionResult cPResult = convertPosition(rNode, rPosition, 2, true);
+                nextNode = cPResult.newNode;
+                rPosition = cPResult.newPosition;
+                hitWall = true;
+            } else {
+                breakLoop = true;
+            }
+            break;
+        case 4:
+            if ((mapFaces[rNode] & 16) == 0) {
+                rPosition += rMotion * closestIncrement;
+                convertPositionResult cPResult = convertPosition(rNode, rPosition, 0, false);
+                nextNode = cPResult.newNode;
+                rPosition = cPResult.newPosition;
+                hitWall = true;
+            } else {
+                breakLoop = true;
+            }
+            break;
+        case 5:
+            if ((mapFaces[rNode] & 4) == 0) {
+                rPosition += rMotion * closestIncrement;
+                convertPositionResult cPResult = convertPosition(rNode, rPosition, 1, false);
+                nextNode = cPResult.newNode;
+                rPosition = cPResult.newPosition;
+                hitWall = true;
+            } else {
+                breakLoop = true;
+            }
+            break;
+        case 6:
+            if ((mapFaces[rNode] & 1) == 0) {
+                rPosition += rMotion * closestIncrement;
+                convertPositionResult cPResult = convertPosition(rNode, rPosition, 2, false);
+                nextNode = cPResult.newNode;
+                rPosition = cPResult.newPosition;
+                hitWall = true;
+            } else {
+                breakLoop = true;
+            }
+            break;
+        default:
+            breakLoop = true;
+    }
+    if (hitWall == true) {
+        if (spaceSkewedVelocity) {
+            rMotion = normalize(vec3( rMotion.x*mapDistances[nextNode].x/mapDistances[rNode].x, rMotion.y*mapDistances[nextNode].y/mapDistances[rNode].y, rMotion.z*mapDistances[nextNode].z/mapDistances[rNode].z ));
+        }
+        rNode = nextNode;
+    }
+    moveRayResult result;
+    result.breakLoop = breakLoop;
+    result.rNode = rNode;
+    result.rPosition = rPosition;
+    result.rMotion = rMotion;
+    result.distanceTraveled = distanceTraveled;
+
+    return result;
+}
+
+int floatToInt (float f) {
+    int tempInt = 0;
+    for (float tempFloat = 0.0; tempFloat < f; tempFloat++){
+        tempInt++;
+    }
+    return tempInt;
+}
 
 void main() {
     vec2 clip = vec2(2.0*(gl_FragCoord.x/width-0.5), 2.0*(gl_FragCoord.y/height-0.5));
@@ -65,47 +255,12 @@ void main() {
         // Find point on side ray is pointing towards
         int closestWall = 0; // 1 is posX, 2 is posY, 3 is posZ, 4 is negX, 5 is negY, 6 is negZ.
         float closestIncrement = 999999999.9; // Amount to multiply by motion vector to reach a wall. Starts at infinity.
-        if (rMotion.x >= 0.0) {
-            float tempDist = (mapDistances[rNode].x - rPosition.x)/rMotion.x;
-            if (tempDist < closestIncrement) {
-                closestIncrement = tempDist;
-                closestWall = 1;
-            }
-        } else {
-            float tempDist = abs(-rPosition.x/rMotion.x);
-            if (tempDist < closestIncrement) {
-                closestIncrement = tempDist;
-                closestWall = 4;
-            }
-        }
-        if (rMotion.y >= 0.0) {
-            float tempDist = (mapDistances[rNode].y - rPosition.y)/rMotion.y;
-            if (tempDist < closestIncrement) {
-                closestIncrement = tempDist;
-                closestWall = 2;
-            }
-        } else {
-            float tempDist = abs(-rPosition.y/rMotion.y);
-            if (tempDist < closestIncrement) {
-                closestIncrement = tempDist;
-                closestWall = 5;
-            }
-        }
-        if (rMotion.z >= 0.0) {
-            float tempDist = (mapDistances[rNode].z - rPosition.z)/rMotion.z;
-            if (tempDist < closestIncrement) {
-                closestIncrement = tempDist;
-                closestWall = 3;
-            }
-        } else {
-            float tempDist = abs(-rPosition.z/rMotion.z);
-            if (tempDist < closestIncrement) {
-                closestIncrement = tempDist;
-                closestWall = 6;
-            }
-        }
+        closestWallResult cWResult = getClosestWall(rNode, rPosition, rMotion);
+        closestWall = cWResult.closestWall;
+        closestIncrement = cWResult.closestIncrement;
 
 
+        // Draw if traveled distance is small (shows at edges)
         if ((closestIncrement < 0.01) && gridlines) {
             if (colorFade) {
                 newColor = vec3(1.0/(1.0+distanceTraveled), 0.0, 0.0);
@@ -114,99 +269,18 @@ void main() {
             }
             break;
         }
-        // Check if side has wall
-        //      If so, stop, record *distance* (required for shading)
-        bool breakLoop = false;
-        distanceTraveled += closestIncrement;
-        
 
-        switch (closestWall) {
-            case 1:
-                if ((mapFaces[rNode] & 32) == 0) {
-                    rPosition += rMotion * closestIncrement;
-                    int nextNode = mapIndices[rNode].x;
-                    rPosition = vec3(0.0, rPosition.y*mapDistances[nextNode].y/mapDistances[rNode].y, rPosition.z*mapDistances[nextNode].z/mapDistances[rNode].z);
-                    if (spaceSkewedVelocity) {
-                        rMotion = normalize(vec3( rMotion.x*mapDistances[nextNode].x/mapDistances[rNode].x, rMotion.y*mapDistances[nextNode].y/mapDistances[rNode].y, rMotion.z*mapDistances[nextNode].z/mapDistances[rNode].z ));
-                    }
-                    rNode = nextNode;
-                } else {
-                    breakLoop = true;
-                }
-                break;
-            case 2:
-                if ((mapFaces[rNode] & 8) == 0) {
-                    rPosition += rMotion * closestIncrement;
-                    int nextNode = mapIndices[rNode].y;
-                    rPosition = vec3(rPosition.x*mapDistances[nextNode].x/mapDistances[rNode].x, 0.0, rPosition.z*mapDistances[nextNode].z/mapDistances[rNode].z);
-                    if (spaceSkewedVelocity) {
-                        rMotion = normalize(vec3( rMotion.x*mapDistances[nextNode].x/mapDistances[rNode].x, rMotion.y*mapDistances[nextNode].y/mapDistances[rNode].y, rMotion.z*mapDistances[nextNode].z/mapDistances[rNode].z ));
-                    }
-                    rNode = nextNode;
-                } else {
-                    breakLoop = true;
-                }
-                break;
-            case 3:
-                if ((mapFaces[rNode] & 2) == 0) {
-                    rPosition += rMotion * closestIncrement;
-                    int nextNode = mapIndices[rNode].z;
-                    rPosition = vec3(rPosition.x*mapDistances[nextNode].x/mapDistances[rNode].x, rPosition.y*mapDistances[nextNode].y/mapDistances[rNode].y, 0.0);
-                    if (spaceSkewedVelocity) {
-                        rMotion = normalize(vec3( rMotion.x*mapDistances[nextNode].x/mapDistances[rNode].x, rMotion.y*mapDistances[nextNode].y/mapDistances[rNode].y, rMotion.z*mapDistances[nextNode].z/mapDistances[rNode].z ));
-                    }
-                    rNode = nextNode;
-                } else {
-                    breakLoop = true;
-                }
-                break;
-            case 4:
-                if ((mapFaces[rNode] & 16) == 0) {
-                    rPosition += rMotion * closestIncrement;
-                    int nextNode = nMapIndices[rNode].x;
-                    rPosition = vec3(mapDistances[nextNode].x, rPosition.y*mapDistances[nextNode].y/mapDistances[rNode].y, rPosition.z*mapDistances[nextNode].z/mapDistances[rNode].z);
-                    if (spaceSkewedVelocity) {
-                        rMotion = normalize(vec3( rMotion.x*mapDistances[nextNode].x/mapDistances[rNode].x, rMotion.y*mapDistances[nextNode].y/mapDistances[rNode].y, rMotion.z*mapDistances[nextNode].z/mapDistances[rNode].z ));
-                    }
-                    rNode = nextNode;
-                } else {
-                    breakLoop = true;
-                }
-                break;
-            case 5:
-                if ((mapFaces[rNode] & 4) == 0) {
-                    rPosition += rMotion * closestIncrement;
-                    int nextNode = nMapIndices[rNode].y;
-                    rPosition = vec3(rPosition.x*mapDistances[nextNode].x/mapDistances[rNode].x, mapDistances[nextNode].y, rPosition.z*mapDistances[nextNode].z/mapDistances[rNode].z);
-                    if (spaceSkewedVelocity) {
-                        rMotion = normalize(vec3( rMotion.x*mapDistances[nextNode].x/mapDistances[rNode].x, rMotion.y*mapDistances[nextNode].y/mapDistances[rNode].y, rMotion.z*mapDistances[nextNode].z/mapDistances[rNode].z ));
-                    }
-                    rNode = nextNode;
-                } else {
-                    breakLoop = true;
-                }
-                break;
-            case 6:
-                if ((mapFaces[rNode] & 1) == 0) {
-                    rPosition += rMotion * closestIncrement;
-                    int nextNode = nMapIndices[rNode].z;
-                    rPosition = vec3(rPosition.x*mapDistances[nextNode].x/mapDistances[rNode].x, rPosition.y*mapDistances[nextNode].y/mapDistances[rNode].y, mapDistances[nextNode].z);
-                    if (spaceSkewedVelocity) {
-                        rMotion = normalize(vec3( rMotion.x*mapDistances[nextNode].x/mapDistances[rNode].x, rMotion.y*mapDistances[nextNode].y/mapDistances[rNode].y, rMotion.z*mapDistances[nextNode].z/mapDistances[rNode].z ));
-                    }
-                    rNode = nextNode;
-                } else {
-                    breakLoop = true;
-                }
-                break;
-            default:
-                breakLoop = true;
-        }
+        moveRayResult mRResult = moveRay(rNode, rPosition, rMotion, distanceTraveled, closestWall, closestIncrement);
+        bool breakLoop = mRResult.breakLoop;
+        rNode = mRResult.rNode;
+        rPosition = mRResult.rPosition;
+        rMotion = mRResult.rMotion;
+        distanceTraveled = mRResult.distanceTraveled;
 
         if (breakLoop) {
             float colorShade = 0.9;
             if (colorFade) {
-                colorShade = 1.0/(1.0+distanceTraveled);
+                colorShade = 1.0/(sqrt(1.0+distanceTraveled/(maxDistance/100.0)));
             }
             //float colorShade = 1.0;
             newColor = vec3(colorShade, colorShade, colorShade);
@@ -217,59 +291,22 @@ void main() {
         if (rNode == currNode) {
             vec3 distToTravel = dot(rPosition-locPos, rMotion)*rMotion;
             float distToSelf = length((rPosition-locPos)-distToTravel);
-            if (distToSelf < 0.3) {
+            if (distToSelf < 0.2) {
                 if (colorFade) {
-                    newColor = vec3(0.0, 0.0, 1.0/(1.0+distanceTraveled+length(distToTravel)));
+                    newColor = vec3(0.0, 0.0, 1.0/sqrt(1.0+(distanceTraveled+length(distToTravel))/(maxDistance/100.0)));
                 } else {
                     newColor = vec3(0.0, 0.0, 1.0);
                 }
                 break;
             }
         }
-        //distanceTraveled += 1.0;
+        for (int i = 0; i < 3; i++) {
 
-        // Place ray on wall
-        // Convert point to new coords
-        // repeat
+        }
+
+
+
     }
 
-
-    
     fragColor = vec4(newColor, 1.0);
-    //fragColor = vec4(max(rMotion.x,0.0), max(rMotion.y,0.0), max(rMotion.z,0.0), 1.0);
-    //fragColor = vec4(max(rMotion.x,0.0), 0.0, 0.0, 1.0);
-    //fragColor = vec4(0.0, max(rMotion.y,0.0), 0.0, 1.0);
-    //fragColor = vec4(0.0, 0.0, max(rMotion.z,0.0), 1.0);
-    
-    //float screenX = gl_FragCoord.x / (width / 2.0) - 1.0;
-    //float screenY = gl_FragCoord.y / (height / 2.0) - 1.0;
-//
-    //float mendelX = (screenX + center.x);
-    //float mendelY = (screenY + center.y);
-//
-    //float lastReal = 0.0;
-    //float lastImg = 0.0;
-//
-    ///float magnitude = 0.0;
-    //for (int k = 0; k < maxDepth; k++) {
-    //    float tempReal = lastReal*lastReal - lastImg*lastImg + mendelX;
-    //    float tempImg = 2.0*lastReal*lastImg + mendelY;
-    //    lastReal = tempReal;
-    //    lastImg = tempImg;
-//
-    //    magnitude = lastReal*lastReal + lastImg+lastImg;
-    //    if (magnitude > 4.0) {
-    //        break;
-    //    }
-    //}
-//
-    //float modifier = 0.3;
-    //if (magnitude > 4.0) {
-    //    modifier = 0.0;
-    //}
-    //if (magnitude > 1.0){
-    //    magnitude = 1.0;
-    //}
-    //fragColor = vec4((1.0-magnitude)/2.0 + modifier, (1.0-magnitude)/8.0 + modifier, 0.0, 1.0);
-    
 }

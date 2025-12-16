@@ -441,7 +441,7 @@ function createGui() {
         },
         'Raycast Depth': {
             value: maxDistance,
-            min: 1, max: 200, step: 1,
+            min: 1, max: 1000, step: 1,
             onChange: v => {maxDistance = v;}
         },
         'Movement Speed': {
@@ -504,6 +504,11 @@ async function init() {
 
 
     startEventListeners();
+
+
+
+    //const texture = gl.createTexture();
+    
     
     initProgram().then((res) => {
       return initBuffers(res[0], res[1]);
