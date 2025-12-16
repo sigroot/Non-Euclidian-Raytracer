@@ -31,7 +31,7 @@ var currNode = 0;
 var view = [1.0, 0.0, 0.0];
 var up = [0.0, 1.0, 0.0];
 
-var mapFolder = "/maps/";
+var mapFolder = "maps/";
 
 const maps = [
     "basicGrid-6-6-6.json",
