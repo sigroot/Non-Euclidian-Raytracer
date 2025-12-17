@@ -386,7 +386,11 @@ function fireRay (origin, startNode, startMotion, maxDistance) {
 }
 
 function startEventListeners() {
-    canvas.addEventListener("mousedown", (event) => {dragging = true; mousePos = [event.layerX, event.layerY];});
+    // Mouse Events
+    canvas.addEventListener("mousedown", (event) => {
+        dragging = true; 
+        mousePos = [event.layerX, event.layerY];
+    });
     canvas.addEventListener("mouseup", (event) => {dragging = false;});
     canvas.addEventListener("mouseout", (event) => {dragging = false;});
     canvas.addEventListener("mousemove", (event) => {
@@ -410,6 +414,54 @@ function startEventListeners() {
             locPos = newPos;
             currNode = newNode;
             view = scaleVector(newView, Math.sign(moveDist));
+        }
+    });
+    // Mobile Events
+    canvas.addEventListener("touchstart", (event) => {
+        dragging = true;
+        var avgX = 0, avgY = 0;
+        for (var i of event.touches) {
+            avgX += i.clientX;
+            avgY += i.clientY;
+        }
+        avgX /= event.touches.length;
+        avgY /= event.touches.length;
+        mousePos = [avgX, avgY];
+    });
+    canvas.addEventListener("touchend", (event) => {
+        if (event.touches.length == 0) {
+            dragging = false;
+        }
+    });
+    canvas.addEventListener("touchmove", (event) => {
+        if (dragging & event.touches.length == 1) {
+            let deltaX = (event.changedTouches[0].clientX - mousePos[0]);
+            let deltaY = (event.changedTouches[0].clientY - mousePos[1]);
+            let horzRotation = -deltaX/canvas.width*rotateSpeed;
+            let vertRotation = deltaY/canvas.height*rotateSpeed;
+            view = rotateVector(view, up, horzRotation);
+            view = addVector(view, scaleVector(up, vertRotation));
+            view = normalizeVector(view);
+            mousePos = [event.changedTouches[0].clientX, event.changedTouches[0].clientY];
+        } else if (event.touches.length == 2) {
+            var avgX = 0, avgY = 0;
+            for (var i of event.touches) {
+                avgX += i.clientX;
+                avgY += i.clientY;
+            }
+            avgX /= event.touches.length;
+            avgY /= event.touches.length;
+            let deltaY = (avgY - mousePos[1]);
+            let moveDist = -Math.abs(deltaY)/deltaY*moveSpeed;
+            let [newPos, newNode, newView] = fireRay(locPos, currNode, scaleVector(view,Math.sign(moveDist)), Math.abs(moveDist));
+            if (!isNaN(newNode) &&
+                !isNaN(newPos[0]) && !isNaN(newPos[1]) && !isNaN(newPos[2])&&
+                !isNaN(newView[0]) && !isNaN(newView[1]) && !isNaN(newView[2])) { 
+                locPos = newPos;
+                currNode = newNode;
+                view = scaleVector(newView, Math.sign(moveDist));
+            }
+            mousePos = [avgX, avgY];
         }
     });
 }
