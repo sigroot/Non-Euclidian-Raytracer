@@ -222,6 +222,133 @@ function distVector(v) {
     return Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
 }
 
+function getWallDist(rNode, rPosition, rMotion) {
+    let closestWall = 0; // 1 is posX, 2 is posY, 3 is posZ, 4 is negX, 5 is negY, 6 is negZ.
+    let closestIncrement = 999999999.9; // Amount to multiply by motion vector to reach a wall. Starts at infinity.
+    
+    // X motion   
+    if (rMotion[0] >= 0.0) {
+        let tempDist = (currMapNextDistances[3*rNode] - rPosition[0])/rMotion[0];
+        if (tempDist < closestIncrement) {
+            closestIncrement = tempDist;
+            closestWall = 1;
+        }
+    } else {
+        let tempDist = Math.abs(-rPosition[0]/rMotion[0]);
+        if (tempDist < closestIncrement) {
+            closestIncrement = tempDist;
+            closestWall = 4;
+        }
+    }
+
+    // Y motion
+    if (rMotion[1] >= 0.0) {
+        let tempDist = (currMapNextDistances[3*rNode+1] - rPosition[1])/rMotion[1];
+        if (tempDist < closestIncrement) {
+            closestIncrement = tempDist;
+            closestWall = 2;
+        }
+    } else {
+        let tempDist = Math.abs(-rPosition[1]/rMotion[1]);
+        if (tempDist < closestIncrement) {
+            closestIncrement = tempDist;
+            closestWall = 5;
+        }
+    }
+
+    // Z motion
+    if (rMotion[2] >= 0.0) {
+        let tempDist = (currMapNextDistances[3*rNode+2] - rPosition[2])/rMotion[2];
+        if (tempDist < closestIncrement) {
+            closestIncrement = tempDist;
+            closestWall = 3;
+        }
+    } else {
+        let tempDist = Math.abs(-rPosition[2]/rMotion[2]);
+        if (tempDist < closestIncrement) {
+            closestIncrement = tempDist;
+            closestWall = 6;
+        }
+    }
+    
+    return [closestWall, closestIncrement];
+}
+
+function moveCamera(closestWall, closestIncrement, rNode, rPosition, rMotion) {
+    // Check if side has wall
+    //      If so, stop, record *distance* (required for shading)
+    var breakLoop = false;
+
+    var nextNode = rNode;
+    var nextPosition = rPosition;
+    var nextMotion = rMotion;
+    
+    switch (closestWall) {
+        case 1:
+            if ((currMapWallFaces[rNode] & 32) == 0) {
+                nextPosition = addVector(rPosition, scaleVector(rMotion, closestIncrement));
+                nextNode = currMapNextIndices[3*rNode];
+                nextPosition = [0.0, nextPosition[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], nextPosition[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2]];
+            } else {
+                breakLoop = true;
+            }
+            break;
+        case 2:
+            if ((currMapWallFaces[rNode] & 8) == 0) {
+                nextPosition = addVector(rPosition, scaleVector(rMotion, closestIncrement));
+                nextNode = currMapNextIndices[3*rNode+1];
+                nextPosition = [nextPosition[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], 0.0, nextPosition[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2]];
+            } else {
+                breakLoop = true;
+            }
+            break;
+        case 3:
+            if ((currMapWallFaces[rNode] & 2) == 0) {
+                nextPosition = addVector(rPosition, scaleVector(rMotion, closestIncrement));
+                nextNode = currMapNextIndices[3*rNode+2];
+                nextPosition = [nextPosition[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], nextPosition[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], 0.0];
+            } else {
+                breakLoop = true;
+            }
+            break;
+        case 4:
+            if ((currMapWallFaces[rNode] & 16) == 0) {
+                nextPosition = addVector(rPosition, scaleVector(rMotion, closestIncrement));
+                nextNode = currMapLastIndices[3*rNode];
+                nextPosition = [currMapNextDistances[3*nextNode], nextPosition[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], nextPosition[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2]];
+            } else {
+                breakLoop = true;
+            }
+            break;
+        case 5:
+            if ((currMapWallFaces[rNode] & 4) == 0) {
+                nextPosition = addVector(rPosition, scaleVector(rMotion, closestIncrement));
+                nextNode = currMapLastIndices[3*rNode+1];
+                nextPosition = [nextPosition[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], currMapNextDistances[3*nextNode+1], nextPosition[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2]];
+            } else {
+                breakLoop = true;
+            }
+            break;
+        case 6:
+            if ((currMapWallFaces[rNode] & 1) == 0) {
+                nextPosition = addVector(rPosition, scaleVector(rMotion, closestIncrement));
+                nextNode = currMapLastIndices[3*rNode+2];
+                nextPosition = [nextPosition[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], nextPosition[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], currMapNextDistances[3*nextNode+2]];
+            } else {
+                breakLoop = true;
+            }
+            break;
+        default:
+            breakLoop = true;
+    }
+    if (breakLoop == false) {
+        if (spaceSkewedVelocity) {
+            nextMotion = normalizeVector([rMotion[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], rMotion[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], rMotion[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2] ]);
+        }
+    }
+    return [breakLoop, nextNode, nextPosition, nextMotion];
+}
+
 function fireRay (origin, startNode, startMotion, maxDistance) {
     let distanceTraveled = 0;
     let rPosition = origin;
@@ -229,139 +356,26 @@ function fireRay (origin, startNode, startMotion, maxDistance) {
     let rNode = startNode;
 
     while (distanceTraveled < maxDistance) {
-        let closestWall = 0; // 1 is posX, 2 is posY, 3 is posZ, 4 is negX, 5 is negY, 6 is negZ.
-        let closestIncrement = 999999999.9; // Amount to multiply by motion vector to reach a wall. Starts at infinity.
-        if (rMotion[0] >= 0.0) {
-            let tempDist = (currMapNextDistances[3*rNode] - rPosition[0])/rMotion[0];
-            if (tempDist < closestIncrement) {
-                closestIncrement = tempDist;
-                closestWall = 1;
-            }
-        } else {
-            let tempDist = Math.abs(-rPosition[0]/rMotion[0]);
-            if (tempDist < closestIncrement) {
-                closestIncrement = tempDist;
-                closestWall = 4;
-            }
-        }
-        if (rMotion[1] >= 0.0) {
-            let tempDist = (currMapNextDistances[3*rNode+1] - rPosition[1])/rMotion[1];
-            if (tempDist < closestIncrement) {
-                closestIncrement = tempDist;
-                closestWall = 2;
-            }
-        } else {
-            let tempDist = Math.abs(-rPosition[1]/rMotion[1]);
-            if (tempDist < closestIncrement) {
-                closestIncrement = tempDist;
-                closestWall = 5;
-            }
-        }
-        if (rMotion[2] >= 0.0) {
-            let tempDist = (currMapNextDistances[3*rNode+2] - rPosition[2])/rMotion[2];
-            if (tempDist < closestIncrement) {
-                closestIncrement = tempDist;
-                closestWall = 3;
-            }
-        } else {
-            let tempDist = Math.abs(-rPosition[2]/rMotion[2]);
-            if (tempDist < closestIncrement) {
-                closestIncrement = tempDist;
-                closestWall = 6;
-            }
-        }
         
+        var [closestWall, closestIncrement] = getWallDist(rNode, rPosition, rMotion);
+
         if (closestIncrement > (maxDistance - distanceTraveled)) {
             rPosition = addVector(rPosition, scaleVector(rMotion, (maxDistance - distanceTraveled)));
             break;
         }
 
-        // Check if side has wall
-        //      If so, stop, record *distance* (required for shading)
-        let breakLoop = false;
         distanceTraveled += closestIncrement;
-        
-        switch (closestWall) {
-            case 1:
-                if ((currMapWallFaces[rNode] & 32) == 0) {
-                    rPosition = addVector(rPosition, scaleVector(rMotion, closestIncrement));
-                    let nextNode = currMapNextIndices[3*rNode];
-                    rPosition = [0.0, rPosition[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], rPosition[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2]];
-                    if (spaceSkewedVelocity) {
-                        rMotion = normalizeVector([rMotion[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], rMotion[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], rMotion[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2] ]);
-                    }
-                    rNode = nextNode;
-                } else {
-                    breakLoop = true;
-                }
-                break;
-            case 2:
-                if ((currMapWallFaces[rNode] & 8) == 0) {
-                    rPosition = addVector(rPosition, scaleVector(rMotion, closestIncrement));
-                    let nextNode = currMapNextIndices[3*rNode+1];
-                    rPosition = [rPosition[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], 0.0, rPosition[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2]];
-                    if (spaceSkewedVelocity) {
-                        rMotion = normalizeVector([rMotion[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], rMotion[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], rMotion[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2] ]);
-                    }
-                    rNode = nextNode;
-                } else {
-                    breakLoop = true;
-                }
-                break;
-            case 3:
-                if ((currMapWallFaces[rNode] & 2) == 0) {
-                    rPosition = addVector(rPosition, scaleVector(rMotion, closestIncrement));
-                    let nextNode = currMapNextIndices[3*rNode+2];
-                    rPosition = [rPosition[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], rPosition[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], 0.0];
-                    if (spaceSkewedVelocity) {
-                        rMotion = normalizeVector([rMotion[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], rMotion[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], rMotion[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2] ]);
-                    }
-                    rNode = nextNode;
-                } else {
-                    breakLoop = true;
-                }
-                break;
-            case 4:
-                if ((currMapWallFaces[rNode] & 16) == 0) {
-                    rPosition = addVector(rPosition, scaleVector(rMotion, closestIncrement));
-                    let nextNode = currMapLastIndices[3*rNode];
-                    rPosition = [currMapNextDistances[3*nextNode], rPosition[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], rPosition[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2]];
-                    if (spaceSkewedVelocity) {
-                        rMotion = normalizeVector([rMotion[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], rMotion[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], rMotion[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2] ]);
-                    }
-                    rNode = nextNode;
-                } else {
-                    breakLoop = true;
-                }
-                break;
-            case 5:
-                if ((currMapWallFaces[rNode] & 4) == 0) {
-                    rPosition = addVector(rPosition, scaleVector(rMotion, closestIncrement));
-                    let nextNode = currMapLastIndices[3*rNode+1];
-                    rPosition = [rPosition[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], currMapNextDistances[3*nextNode+1], rPosition[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2]];
-                    if (spaceSkewedVelocity) {
-                        rMotion = normalizeVector([rMotion[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], rMotion[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], rMotion[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2] ]);
-                    }
-                    rNode = nextNode;
-                } else {
-                    breakLoop = true;
-                }
-                break;
-            case 6:
-                if ((currMapWallFaces[rNode] & 1) == 0) {
-                    rPosition = addVector(rPosition, scaleVector(rMotion, closestIncrement));
-                    let nextNode = currMapLastIndices[3*rNode+2];
-                    rPosition = [rPosition[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], rPosition[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], currMapNextDistances[3*nextNode+2]];
-                    if (spaceSkewedVelocity) {
-                        rMotion = normalizeVector([rMotion[0]*currMapNextDistances[3*nextNode]/currMapNextDistances[3*rNode], rMotion[1]*currMapNextDistances[3*nextNode+1]/currMapNextDistances[3*rNode+1], rMotion[2]*currMapNextDistances[3*nextNode+2]/currMapNextDistances[3*rNode+2] ]);
-                    }
-                    rNode = nextNode;
-                } else {
-                    breakLoop = true;
-                }
-                break;
-            default:
-                breakLoop = true;
+        var [breakLoop, newNode, newPosition, newMotion] = moveCamera(closestWall, closestIncrement, rNode, rPosition, rMotion);
+
+        if (!isNaN(newNode) &&
+            !isNaN(newPosition[0]) && !isNaN(newPosition[1]) && !isNaN(newPosition[2])&&
+            !isNaN(newMotion[0]) && !isNaN(newMotion[1]) && !isNaN(newMotion[2])) {
+            rNode = newNode;
+            rPosition = newPosition;
+            rMotion = newMotion;
+        }
+        if (rPosition[0] == NaN){
+            console.log(newNode, newPosition, newMotion);
         }
 
         if (breakLoop) {
@@ -390,9 +404,13 @@ function startEventListeners() {
     canvas.addEventListener("wheel", (event) => {
         let moveDist = -Math.abs(event.deltaY)/event.deltaY*moveSpeed;
         let [newPos, newNode, newView] = fireRay(locPos, currNode, scaleVector(view,Math.sign(moveDist)), Math.abs(moveDist));
-        locPos = newPos;
-        currNode = newNode;
-        view = scaleVector(newView, Math.sign(moveDist));
+        if (!isNaN(newNode) &&
+            !isNaN(newPos[0]) && !isNaN(newPos[1]) && !isNaN(newPos[2])&&
+            !isNaN(newView[0]) && !isNaN(newView[1]) && !isNaN(newView[2])) { 
+            locPos = newPos;
+            currNode = newNode;
+            view = scaleVector(newView, Math.sign(moveDist));
+        }
     });
 }
 
@@ -464,6 +482,7 @@ function createGui() {
         'Reset position': {
             value: resetPosition,
             onChange: v => {
+                console.log(`Original State\nPosition: ${locPos}\nNode: ${currNode}\nView Vector: ${view}\nUp Vector: ${up}\nPosVec1: ${locPos[0] == NaN}`);
                 locPos = [0.5, 0.5, 0.5];
                 currNode = 0;
                 view = [1.0, 0.0, 0.0];
