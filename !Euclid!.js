@@ -19,7 +19,8 @@ let canvas,
     indexBuffer,
     vShader,
     fShader,
-    indices;
+    indices,
+    texture;
 
 var dragging = false;
 var mousePos = [0, 0];
@@ -41,10 +42,11 @@ const maps = [
     "basicGrid-6-6-6_distortedSpaceMore.json",
     "basicGrid-6-6-6_distortedSpaceExtreme.json",
     "basicGrid-3-3-3_distortedSpaceExtreme.json",
-
 ];
 
 var currMapName = "";
+var currMapStorageTexture;
+var maxTextureSize;
 var currMapNextIndices = [];
 var currMapNextDistances = [];
 var currMapLastIndices = [];
@@ -97,9 +99,9 @@ function initBuffers(vShaderText, fShaderText) {
        [0.0, 0.0, 
         0.0, 1.0, 
         1.0, 1.0, 
-        1.0, 0.0]
+        1.0, 0.0];
     
-    indices = [0, 2, 1, 2, 3, 0]
+    indices = [0, 2, 1, 2, 3, 0];
     
     
     vShader = gl.createShader(gl.VERTEX_SHADER);
@@ -147,10 +149,24 @@ function initBuffers(vShaderText, fShaderText) {
     program.up = gl.getUniformLocation(program, "up");
 
     // Map information
-    program.mapIndices = gl.getUniformLocation(program, "mapIndices");
-    program.mapDistances = gl.getUniformLocation(program, "mapDistances");
-    program.nMapIndices = gl.getUniformLocation(program, "nMapIndices");
-    program.mapFaces = gl.getUniformLocation(program, "mapFaces");
+    //maxTextureSize = gl.MAX_TEXTURE_SIZE;
+    maxTextureSize = 300;
+    texture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    //gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R32F, maxTextureSize, 4);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    var initData = new Float32Array(4*maxTextureSize).fill(0);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, maxTextureSize, 4, 0, gl.RED, gl.FLOAT, initData);
+
+    program.texture = gl.getUniformLocation(program, "texture");
+    //program.mapIndices = gl.getUniformLocation(program, "mapIndices");
+    //program.mapDistances = gl.getUniformLocation(program, "mapDistances");
+    //program.nMapIndices = gl.getUniformLocation(program, "nMapIndices");
+    //program.mapFaces = gl.getUniformLocation(program, "mapFaces");
 
     // Render settings
     program.maxDistance = gl.getUniformLocation(program, "maxDistance");
@@ -183,10 +199,11 @@ function updateVariables() {
     gl.uniform1i( program.gridlines, gridlines); 
     gl.uniform1i( program.colorFade, colorFade); 
     if (currMapName != "") {
-        gl.uniform3iv( program.mapIndices, currMapNextIndices );
-        gl.uniform3fv( program.mapDistances, currMapNextDistances );
-        gl.uniform3iv( program.nMapIndices, currMapLastIndices );
-        gl.uniform1iv( program.mapFaces, currMapWallFaces );
+        gl.uniform1i(program.texture, 0);
+        //gl.uniform3iv( program.mapIndices, currMapNextIndices );
+        //gl.uniform3fv( program.mapDistances, currMapNextDistances );
+        //gl.uniform3iv( program.nMapIndices, currMapLastIndices );
+        //gl.uniform1iv( program.mapFaces, currMapWallFaces );
     }
 }
 
@@ -449,17 +466,28 @@ function render() {
 
 function loadMap(mapName) {
     currMapName = "";
-    currMapNextIndices = [];
-    currMapNextDistances = [];
-    currMapLastIndices = [];
-    currMapWallFaces = [];
+    currMapNextIndices = new Float32Array(maxTextureSize);
+    currMapNextDistances = new Float32Array(maxTextureSize);
+    currMapLastIndices = new Float32Array(maxTextureSize);
+    currMapWallFaces = new Float32Array(maxTextureSize);
     loadJSON(mapFolder.concat(mapName)).then(res => {
-        for (var i of res) {
-            currMapNextIndices.push(i.nextIndices[0], i.nextIndices[1], i.nextIndices[2]);
-            currMapNextDistances.push(i.nextDistances[0], i.nextDistances[1], i.nextDistances[2]);
-            currMapLastIndices.push(i.lastIndices[0], i.lastIndices[1], i.lastIndices[2]);
-            currMapWallFaces.push(i.wallInt);
+        console.log(res);
+        for (var i = 0; i < res.length; i++) {
+            console.log(res[i]);
+            for (var j = 0; j < 3; j++) {
+                currMapNextIndices[3*i+j] = res[i].nextIndices[j];
+                currMapNextDistances[3*i+j] = res[i].nextDistances[j];
+                currMapLastIndices[3*i+j] = res[i].lastIndices[j];
+            }
+            currMapWallFaces[i] = res[i].wallInt;
         }
+        console.log(currMapNextIndices);
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, currMapNextIndices.length, 1, gl.RED, gl.FLOAT, currMapNextIndices);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 1, currMapNextDistances.length, 1, gl.RED, gl.FLOAT, currMapNextDistances);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 2, currMapLastIndices.length, 1, gl.RED, gl.FLOAT, currMapLastIndices);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 3, currMapWallFaces.length, 1, gl.RED, gl.FLOAT, currMapWallFaces);
+        
         currMapName = mapName
     });
 }
