@@ -13,18 +13,19 @@ precision highp int;
 // 
 
 // Maximum number of map nodes
-const int maxMapSize = 6*6*6;
+const int maxMapSize = 10922;
 // Define map
 // 2 vectors for each node (array position is index): 
-// node index in (x-axis dir, y-axis dir, z-axis dir)
-// dist to (x-axis node, y-axis node, z-axis node)
-// negative node index of (x-axis , y-axis, z-axis)
-// opaque faces in bitmap of ( * * x -x y -y z -z)
+// y=0: node index in (x-axis dir, y-axis dir, z-axis dir)
+// y=1: dist to (x-axis node, y-axis node, z-axis node)
+// y=2: negative node index of (x-axis , y-axis, z-axis)
+// y=3: opaque faces in bitmap of ( * * x -x y -y z -z)
 
-uniform ivec3 mapIndices[maxMapSize];
-uniform vec3 mapDistances[maxMapSize];
-uniform ivec3 nMapIndices[maxMapSize];
-uniform int mapFaces[maxMapSize];
+//ivec3 mapIndices[maxMapSize];
+//vec3 mapDistances[maxMapSize];
+//ivec3 nMapIndices[maxMapSize];
+//int mapFaces[maxMapSize];
+uniform sampler2D uStorageTexture;
 
 // Define location of camera
 uniform vec3 locPos;
@@ -51,17 +52,25 @@ struct convertPositionResult {
 convertPositionResult convertPosition (int rNode, vec3 rPosition, int xyz, bool pos) {
     int nextNode;
     if (pos) {
-        nextNode = mapIndices[rNode][xyz];
+        //nextNode = mapIndices[rNode][xyz];
+        nextNode = int(texelFetch(uStorageTexture, ivec2(3*rNode + xyz, 0),0).x);
     } else {
-        nextNode = nMapIndices[rNode][xyz];
+        //nextNode = nMapIndices[rNode][xyz];
+        nextNode = int(texelFetch(uStorageTexture, ivec2(3*rNode + xyz, 2),0).x);
     }
 
-    vec3 newPosition = vec3(rPosition.x*mapDistances[nextNode].x/mapDistances[rNode].x, rPosition.y*mapDistances[nextNode].y/mapDistances[rNode].y, rPosition.z*mapDistances[nextNode].z/mapDistances[rNode].z);
+    //vec3 newPosition = vec3(rPosition.x*mapDistances[nextNode].x/mapDistances[rNode].x, rPosition.y*mapDistances[nextNode].y/mapDistances[rNode].y, rPosition.z*mapDistances[nextNode].z/mapDistances[rNode].z);
+    vec3 newPosition = vec3(
+        rPosition.x*texelFetch(uStorageTexture, ivec2(3*nextNode + 0, 1), 0).x/texelFetch(uStorageTexture, ivec2(3*rNode + 0, 1), 0).x, 
+        rPosition.y*texelFetch(uStorageTexture, ivec2(3*nextNode + 1, 1), 0).x/texelFetch(uStorageTexture, ivec2(3*rNode + 1, 1), 0).x, 
+        rPosition.z*texelFetch(uStorageTexture, ivec2(3*nextNode + 2, 1), 0).x/texelFetch(uStorageTexture, ivec2(3*rNode + 2, 1), 0).x);
     
+
     if (pos) {
         newPosition[xyz] = 0.0;
     } else {
-        newPosition[xyz] = mapDistances[nextNode][xyz];
+        //newPosition[xyz] = mapDistances[nextNode][xyz];
+        newPosition[xyz] = texelFetch(uStorageTexture, ivec2(3*nextNode + xyz, 1), 0).x;
     }
 
     convertPositionResult result;
@@ -80,7 +89,9 @@ closestWallResult getClosestWall (int rNode, vec3 rPosition, vec3 rMotion) {
     int closestWall = 0; // 1 is posX, 2 is posY, 3 is posZ, 4 is negX, 5 is negY, 6 is negZ.
     float closestIncrement = 999999999.9; // Amount to multiply by motion vector to reach a wall. Starts at infinity.
     if (rMotion.x >= 0.0) {
-        float tempDist = (mapDistances[rNode].x - rPosition.x)/rMotion.x;
+        //float tempDist = (mapDistances[rNode].x - rPosition.x)/rMotion.x;
+        float tempDist = (texelFetch(uStorageTexture, ivec2(0, 1), 0).x - rPosition.x)/rMotion.x;
+        //float tempDist = (1.0-rPosition.x)/rMotion.x;
         if (tempDist < closestIncrement) {
             closestIncrement = tempDist;
             closestWall = 1;
@@ -93,7 +104,9 @@ closestWallResult getClosestWall (int rNode, vec3 rPosition, vec3 rMotion) {
         }
     }
     if (rMotion.y >= 0.0) {
-        float tempDist = (mapDistances[rNode].y - rPosition.y)/rMotion.y;
+        //float tempDist = (mapDistances[rNode].y - rPosition.y)/rMotion.y;
+        float tempDist = (texelFetch(uStorageTexture, ivec2(8, 1), 0).x - rPosition.y)/rMotion.y;
+        //float tempDist = (1.0-rPosition.y)/rMotion.y;
         if (tempDist < closestIncrement) {
             closestIncrement = tempDist;
             closestWall = 2;
@@ -106,7 +119,9 @@ closestWallResult getClosestWall (int rNode, vec3 rPosition, vec3 rMotion) {
         }
     }
     if (rMotion.z >= 0.0) {
-        float tempDist = (mapDistances[rNode].z - rPosition.z)/rMotion.z;
+        //float tempDist = (mapDistances[rNode].z - rPosition.z)/rMotion.z;
+        float tempDist = (texelFetch(uStorageTexture, ivec2(0, 1), 0).x - rPosition.z)/rMotion.z;
+        //float tempDist = (1.0-rPosition.z)/rMotion.z;
         if (tempDist < closestIncrement) {
             closestIncrement = tempDist;
             closestWall = 3;
@@ -143,7 +158,7 @@ moveRayResult moveRay (int rNode, vec3 rPosition, vec3 rMotion, float distanceTr
 
     switch (closestWall) {
         case 1:
-            if ((mapFaces[rNode] & 32) == 0) {
+            if ((int(texelFetch(uStorageTexture, ivec2(3*rNode, 3), 0).x) & 32) == 0) {
                 rPosition += rMotion * closestIncrement;
                 convertPositionResult cPResult = convertPosition(rNode, rPosition, 0, true);
                 nextNode = cPResult.newNode;
@@ -154,7 +169,7 @@ moveRayResult moveRay (int rNode, vec3 rPosition, vec3 rMotion, float distanceTr
             }
             break;
         case 2:
-            if ((mapFaces[rNode] & 8) == 0) {
+            if ((int(texelFetch(uStorageTexture, ivec2(3*rNode, 3), 0).x) & 8) == 0) {
                 rPosition += rMotion * closestIncrement;
                 convertPositionResult cPResult = convertPosition(rNode, rPosition, 1, true);
                 nextNode = cPResult.newNode;
@@ -165,7 +180,7 @@ moveRayResult moveRay (int rNode, vec3 rPosition, vec3 rMotion, float distanceTr
             }
             break;
         case 3:
-            if ((mapFaces[rNode] & 2) == 0) {
+            if ((int(texelFetch(uStorageTexture, ivec2(3*rNode, 3), 0).x) & 2) == 0) {
                 rPosition += rMotion * closestIncrement;
                 convertPositionResult cPResult = convertPosition(rNode, rPosition, 2, true);
                 nextNode = cPResult.newNode;
@@ -176,7 +191,7 @@ moveRayResult moveRay (int rNode, vec3 rPosition, vec3 rMotion, float distanceTr
             }
             break;
         case 4:
-            if ((mapFaces[rNode] & 16) == 0) {
+            if ((int(texelFetch(uStorageTexture, ivec2(3*rNode, 3), 0).x) & 16) == 0) {
                 rPosition += rMotion * closestIncrement;
                 convertPositionResult cPResult = convertPosition(rNode, rPosition, 0, false);
                 nextNode = cPResult.newNode;
@@ -187,7 +202,7 @@ moveRayResult moveRay (int rNode, vec3 rPosition, vec3 rMotion, float distanceTr
             }
             break;
         case 5:
-            if ((mapFaces[rNode] & 4) == 0) {
+            if ((int(texelFetch(uStorageTexture, ivec2(3*rNode, 3), 0).x) & 4) == 0) {
                 rPosition += rMotion * closestIncrement;
                 convertPositionResult cPResult = convertPosition(rNode, rPosition, 1, false);
                 nextNode = cPResult.newNode;
@@ -198,7 +213,7 @@ moveRayResult moveRay (int rNode, vec3 rPosition, vec3 rMotion, float distanceTr
             }
             break;
         case 6:
-            if ((mapFaces[rNode] & 1) == 0) {
+            if ((int(texelFetch(uStorageTexture, ivec2(3*rNode, 3), 0).x) & 1) == 0) {
                 rPosition += rMotion * closestIncrement;
                 convertPositionResult cPResult = convertPosition(rNode, rPosition, 2, false);
                 nextNode = cPResult.newNode;
@@ -213,7 +228,13 @@ moveRayResult moveRay (int rNode, vec3 rPosition, vec3 rMotion, float distanceTr
     }
     if (hitWall == true) {
         if (spaceSkewedVelocity) {
-            rMotion = normalize(vec3( rMotion.x*mapDistances[nextNode].x/mapDistances[rNode].x, rMotion.y*mapDistances[nextNode].y/mapDistances[rNode].y, rMotion.z*mapDistances[nextNode].z/mapDistances[rNode].z ));
+            //rMotion = normalize(vec3( rMotion.x*mapDistances[nextNode].x/mapDistances[rNode].x, rMotion.y*mapDistances[nextNode].y/mapDistances[rNode].y, rMotion.z*mapDistances[nextNode].z/mapDistances[rNode].z ));
+            rMotion = normalize(
+                vec3( 
+                    rMotion.x*texelFetch(uStorageTexture, ivec2(3*nextNode + 0, 1), 0).x/texelFetch(uStorageTexture, ivec2(3*rNode + 0, 1), 0).x, 
+                    rMotion.y*texelFetch(uStorageTexture, ivec2(3*nextNode + 1, 1), 0).x/texelFetch(uStorageTexture, ivec2(3*rNode + 1, 1), 0).x, 
+                    rMotion.z*texelFetch(uStorageTexture, ivec2(3*nextNode + 2, 1), 0).x/texelFetch(uStorageTexture, ivec2(3*rNode + 2, 1), 0).x 
+                ));
         }
         rNode = nextNode;
     }
@@ -258,7 +279,6 @@ void main() {
         closestWallResult cWResult = getClosestWall(rNode, rPosition, rMotion);
         closestWall = cWResult.closestWall;
         closestIncrement = cWResult.closestIncrement;
-
 
         // Draw if traveled distance is small (shows at edges)
         if ((closestIncrement < 0.01) && gridlines) {
