@@ -10,9 +10,9 @@
 
 const fs = require('node:fs');
 
-var xSize = parseInt(process.argv[2]);
-var ySize = parseInt(process.argv[3]);
-var zSize = parseInt(process.argv[4]);
+var xSize = 3;
+var ySize = 3;
+var zSize = 3;
 
 var grid = [];
 
@@ -30,24 +30,11 @@ function within(value, space) {
     return value;
 }
 
-function makeGap(i, j, k) {
-    for (var l = -1, l <= 1, l++) {
-        for (var m = -1, m <= 1, m++) {
-            for (var n = -1, n <= 1, n++) {
-                var tempNode = grid[calcIndex(i+l,j+m,k+n)];
-                if (l == 0 && m == 0 && n == 0) {
-                    tempNode = null;
-                } else {
-                    var tempNode = grid[calcIndex(i+l,j+m,k+n)];
-                }
-            }
-        }
-    }
-}
 
 for (var k = 0; k < zSize; k++) {
     for (var j = 0; j < ySize; j++) {
         for (var i = 0; i < xSize; i++) {
+            //if (i == 1 && j == 1 && k == 1) {continue}
             let currentIndex = calcIndex(i, j, k);
 
             let nextX = calcIndex(within(i+1, xSize), j, k);
@@ -97,16 +84,16 @@ for (var k = 0; k < zSize; k++) {
     }
 }
 
-for (var k = 1; k < zSize - 1; k++) {
-    for (var j = 1; j < ySize - 1; j++) {
-        for (var i = 1; i < xSize - 1; i++) {
-            makeGap(i, j, k);
-        }
-    }
-}
+grid[calcIndex(1, 1, 0)].nextIndices[2] = calcIndex(1, 1, 2);
+grid[calcIndex(1, 0, 1)].nextIndices[1] = calcIndex(1, 2, 1);
+grid[calcIndex(0, 1, 1)].nextIndices[0] = calcIndex(2, 1, 1);
+grid[calcIndex(1, 1, 2)].lastIndices[2] = calcIndex(1, 1, 0);
+grid[calcIndex(1, 2, 1)].lastIndices[1] = calcIndex(1, 0, 1);
+grid[calcIndex(2, 1, 1)].lastIndices[0] = calcIndex(0, 1, 1);
+
 
 try {
-    fs.writeFileSync(`basicGrid-${String(xSize)}-${String(ySize)}-${String(zSize)}_holes.json`, JSON.stringify(grid));
+    fs.writeFileSync(`basicGrid-${String(xSize)}-${String(ySize)}-${String(zSize)}_gap.json`, JSON.stringify(grid));
 } catch (err) {
     console.error(err);
 }

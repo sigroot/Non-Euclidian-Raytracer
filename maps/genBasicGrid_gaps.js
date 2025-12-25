@@ -38,7 +38,7 @@ function makeGap(i, j, k) {
                 if (l == 0 && m == 0 && n == 0) {
                     tempNode = null;
                 } else {
-                    var tempNode = grid[calcIndex(i+l,j+m,k+n)];
+                    
                 }
             }
         }

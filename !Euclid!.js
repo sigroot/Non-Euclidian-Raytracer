@@ -41,7 +41,10 @@ const maps = [
     "basicGrid-6-6-6_distortedSpaceMore.json",
     "basicGrid-6-6-6_distortedSpaceExtreme.json",
     "basicGrid-3-3-3_distortedSpaceExtreme.json",
-
+    "basicGrid-3-3-3_gapBroken.json",
+    "basicGrid-3-3-3_gapBroken2.json",
+    "basicGrid-3-3-3_gapBroken3.json",
+    "basicGrid-3-3-3_gap.json",
 ];
 
 var currMapName = "";
